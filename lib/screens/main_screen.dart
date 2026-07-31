@@ -43,10 +43,10 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       values[index] = value;
     });
-    // Convertir 0-100% en DMX 0-255
-    int dmxValue = (value * 2.55).round();
-    int dmxAddress = fixtures[index]['dmx'];
-    _oscService.sendDimmerValue(dmxAddress, dmxValue);
+    // Convertir 0-100% en float 0.0-1.0 pour Sunlite Suite 3
+    double floatValue = value / 100.0;
+    int fixtureId = fixtures[index]['dmx']; // ID fixture (1-8)
+    _oscService.sendFixtureDimmer(fixtureId, floatValue);
   }
 
   @override

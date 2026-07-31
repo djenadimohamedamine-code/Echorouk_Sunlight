@@ -17,9 +17,11 @@ class OscService {
     }
   }
 
-  void sendDimmerValue(int dmxAddress, int value) {
+  /// Envoie la valeur d'un fixture à Sunlite Suite 3
+  /// address = OSC path, value = 0.0 à 1.0 (float)
+  void sendFixtureDimmer(int fixtureId, double value) {
     if (_socket == null) return;
-    final message = _encodeOscMessage('/dmx/$dmxAddress', [value]);
+    final message = _encodeOscMessageFloat('/fixture/$fixtureId/dimmer', value);
     _socket?.send(message, InternetAddress(ipAddress), port);
   }
 
@@ -27,34 +29,25 @@ class OscService {
     _socket?.close();
   }
 
-  Uint8List _encodeOscMessage(String address, List<int> arguments) {
+  /// Encode OSC avec un argument float (format Sunlite Suite 3)
+  Uint8List _encodeOscMessageFloat(String address, double value) {
     final bytes = BytesBuilder();
 
     void writeString(String s) {
       bytes.add(s.codeUnits);
       bytes.addByte(0);
-      while (bytes.length % 4 != 0) {
-        bytes.addByte(0);
-      }
+      while (bytes.length % 4 != 0) bytes.addByte(0);
     }
 
-    void writeInt(int value) {
+    void writeFloat(double v) {
       final b = Uint8List(4);
-      b.buffer.asByteData().setInt32(0, value, Endian.big);
+      b.buffer.asByteData().setFloat32(0, v, Endian.big);
       bytes.add(b);
     }
 
     writeString(address);
-
-    final typeTags = StringBuffer(',');
-    for (var i = 0; i < arguments.length; i++) {
-      typeTags.write('i');
-    }
-    writeString(typeTags.toString());
-
-    for (final arg in arguments) {
-      writeInt(arg);
-    }
+    writeString(',f'); // 'f' = float32
+    writeFloat(value);
 
     return bytes.toBytes();
   }
