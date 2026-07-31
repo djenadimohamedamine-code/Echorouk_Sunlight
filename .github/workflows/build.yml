@@ -9,23 +9,31 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: source
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0'
+          flutter-version: '3.22.0'
+          channel: 'stable'
 
-      - name: Generate iOS platform folder
-        run: flutter create --platforms=ios --org com.echorouk --project-name echorouk_sunlight .
+      - name: Create fresh Flutter project and copy our code
+        run: |
+          flutter create --org com.echorouk --project-name echorouk_sunlight fresh_app
+          cp -r source/lib fresh_app/
+          cp source/pubspec.yaml fresh_app/pubspec.yaml
 
       - name: Install dependencies
         run: flutter pub get
+        working-directory: fresh_app
 
-      - name: Build iOS (no codesign)
+      - name: Build iOS
         run: flutter build ios --release --no-codesign
+        working-directory: fresh_app
 
       - name: Package IPA
         run: |
-          cd build/ios/iphoneos
+          cd fresh_app/build/ios/iphoneos
           mkdir -p Payload
           cp -r Runner.app Payload/
           zip -r echorouk-sunlight.ipa Payload
@@ -33,27 +41,35 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: echorouk-sunlight-ipa
-          path: build/ios/iphoneos/echorouk-sunlight.ipa
+          path: fresh_app/build/ios/iphoneos/echorouk-sunlight.ipa
 
   build_android:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: source
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0'
+          flutter-version: '3.22.0'
+          channel: 'stable'
 
-      - name: Generate Android platform folder
-        run: flutter create --platforms=android --org com.echorouk --project-name echorouk_sunlight .
+      - name: Create fresh Flutter project and copy our code
+        run: |
+          flutter create --org com.echorouk --project-name echorouk_sunlight fresh_app
+          cp -r source/lib fresh_app/
+          cp source/pubspec.yaml fresh_app/pubspec.yaml
 
       - name: Install dependencies
         run: flutter pub get
+        working-directory: fresh_app
 
       - name: Build APK
         run: flutter build apk --release
+        working-directory: fresh_app
 
       - uses: actions/upload-artifact@v4
         with:
           name: echorouk-sunlight-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: fresh_app/build/app/outputs/flutter-apk/app-release.apk
