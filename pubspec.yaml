@@ -9,7 +9,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  osc: ^2.0.2
 
 dev_dependencies:
   flutter_test:

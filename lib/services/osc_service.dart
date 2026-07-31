@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:osc/osc.dart';
+import 'dart:typed_data';
 
 class OscService {
   final String ipAddress;
@@ -19,15 +19,43 @@ class OscService {
 
   void sendDimmerValue(int dmxAddress, int value) {
     if (_socket == null) return;
-    final message = OSCMessage(
-      '/dmx/$dmxAddress',
-      arguments: [value],
-    );
-    final bytes = message.toBytes();
-    _socket?.send(bytes, InternetAddress(ipAddress), port);
+    final message = _encodeOscMessage('/dmx/$dmxAddress', [value]);
+    _socket?.send(message, InternetAddress(ipAddress), port);
   }
 
   void dispose() {
     _socket?.close();
+  }
+
+  Uint8List _encodeOscMessage(String address, List<int> arguments) {
+    final bytes = BytesBuilder();
+
+    void writeString(String s) {
+      bytes.add(s.codeUnits);
+      bytes.addByte(0);
+      while (bytes.length % 4 != 0) {
+        bytes.addByte(0);
+      }
+    }
+
+    void writeInt(int value) {
+      final b = Uint8List(4);
+      b.buffer.asByteData().setInt32(0, value, Endian.big);
+      bytes.add(b);
+    }
+
+    writeString(address);
+
+    final typeTags = StringBuffer(',');
+    for (var i = 0; i < arguments.length; i++) {
+      typeTags.write('i');
+    }
+    writeString(typeTags.toString());
+
+    for (final arg in arguments) {
+      writeInt(arg);
+    }
+
+    return bytes.toBytes();
   }
 }
