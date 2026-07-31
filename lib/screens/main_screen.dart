@@ -8,7 +8,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   // IP FIXE du PC Sunlite
-  final String sunliteIp = '192.168.1.50';
+  final String sunliteIp = '192.168.1.6';
   late OscService _oscService;
 
   // Valeurs des 8 sliders (0.0 à 100.0)
