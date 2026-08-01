@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/osc_service.dart';
+import '../services/easy_remote_service.dart';
 
 class MainScreen extends StatefulWidget {
   @override
@@ -7,35 +7,54 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  // IP FIXE du PC Sunlite
+  // IP FIXE du PC Sunlite Suite 3
   final String sunliteIp = '192.168.1.6';
-  late OscService _oscService;
+  late EasyRemoteService _easyRemote;
+  bool _connected = false;
+  int _elementCount = 0;
 
   // Valeurs des 8 sliders (0.0 à 100.0)
   List<double> values = List.filled(8, 0.0);
 
-  // Configuration en dur des 8 projecteurs
+  // Configuration des 8 projecteurs avec leur ID EasyRemote (page 1).
+  // D'après le layout reçu de Suite3, les boutons scène page 1 sont id=2..11.
   final List<Map<String, dynamic>> fixtures = [
-    {'name': 'Projo 1', 'dmx': 1},
-    {'name': 'Projo 2', 'dmx': 2},
-    {'name': 'Projo 3', 'dmx': 3},
-    {'name': 'Projo 4', 'dmx': 4},
-    {'name': 'Gobo 1',  'dmx': 5},
-    {'name': 'Gobo 2',  'dmx': 6},
-    {'name': 'Gobo 3',  'dmx': 7},
-    {'name': 'Gobo 4',  'dmx': 8},
+    {'name': 'Projo 1', 'control_id': 2},
+    {'name': 'Projo 2', 'control_id': 3},
+    {'name': 'Projo 3', 'control_id': 4},
+    {'name': 'Projo 4', 'control_id': 5},
+    {'name': 'Gobo 1', 'control_id': 6},
+    {'name': 'Gobo 2', 'control_id': 7},
+    {'name': 'Gobo 3', 'control_id': 8},
+    {'name': 'Gobo 4', 'control_id': 9},
   ];
 
   @override
   void initState() {
     super.initState();
-    _oscService = OscService(ipAddress: sunliteIp);
-    _oscService.connect();
+    _easyRemote = EasyRemoteService(
+      ipAddress: sunliteIp,
+      onConnected: () {
+        setState(() {
+          _connected = true;
+          _elementCount = _easyRemote.elements.length;
+        });
+        print('EasyRemote: console layout loaded ($_elementCount elements)');
+      },
+      onMessage: (msg) {
+        // Optionnel: log des messages
+      },
+      onError: (err) {
+        print('EasyRemote error: $err');
+        setState(() => _connected = false);
+      },
+    );
+    _easyRemote.connect();
   }
 
   @override
   void dispose() {
-    _oscService.dispose();
+    _easyRemote.dispose();
     super.dispose();
   }
 
@@ -43,10 +62,11 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       values[index] = value;
     });
-    // Convertir 0-100% en float 0.0-1.0 pour Sunlite Suite 3
-    double floatValue = value / 100.0;
-    int fixtureId = fixtures[index]['dmx']; // ID fixture (1-8)
-    _oscService.sendFixtureDimmer(fixtureId, floatValue);
+    // Convertir 0-100% en DMX 0-255
+    int dmxValue = (value * 2.55).round().clamp(0, 255);
+    int controlId = fixtures[index]['control_id'];
+    // La console Echorouk utilise des sliders (type=sld) pour les projecteurs.
+    _easyRemote.setSlider(1, controlId, dmxValue);
   }
 
   @override
@@ -60,8 +80,11 @@ class _MainScreenState extends State<MainScreen> {
             child: Padding(
               padding: const EdgeInsets.only(right: 16.0),
               child: Text(
-                '● $sunliteIp',
-                style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold),
+                '${_connected ? "●" : "○"} $sunliteIp',
+                style: TextStyle(
+                  color: _connected ? Colors.greenAccent : Colors.redAccent,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           )
