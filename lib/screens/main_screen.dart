@@ -7,8 +7,8 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  // IP du PC Sunlite Suite 3 (validée par capture réseau : 169.254.83.107)
-  final String sunliteIp = '169.254.83.107';
+  // IP du PC Sunlite Suite 3 (confirmée par capture Wireshark : téléphone -> 192.168.1.6)
+  final String sunliteIp = '192.168.1.6';
   late EasyRemoteService _easyRemote;
   bool _connected = false;
 
