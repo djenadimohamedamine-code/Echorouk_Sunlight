@@ -53,28 +53,26 @@ class EasyRemoteService {
 
   /// Sends an update_element command.
   ///
-  /// page=1 is the main scene/page in the show.
+  /// La console de Suite3 est sur page=0 (validé par capture réseau).
   void updateElement({
     required int elementId,
-    required int page,
+    int page = 0,
     required int value,
-    String type = 'btn',
-    String event = 'up',
+    String type = 'sld',
+    String event = 'move',
   }) {
     sendRaw('action=update_element&id=$elementId&page=$page&value=$value&type=$type&event=$event');
   }
 
-  /// Activates/deactivates projecteur scène (button toggle).
-  /// value=127 → on, value=0 → off
-  void setProjector(int projectorId, double intensity) {
+  /// Règle un slider de la console (id = ID de l'élément, validé : 0=Master, 1..N=projecteurs).
+  void setSlider(int elementId, double intensity) {
     int val = (intensity * 255).round().clamp(0, 255);
-    updateElement(elementId: projectorId, page: 1, value: val, type: 'sld', event: 'move');
+    updateElement(elementId: elementId, page: 0, value: val, type: 'sld', event: 'move');
   }
 
-  /// Set master fader (id=0 is usually the global master)
+  /// Set master fader (id=0 est le master global, validé par capture)
   void setMaster(double intensity) {
-    int val = (intensity * 255).round().clamp(0, 255);
-    updateElement(elementId: 0, page: 1, value: val, type: 'sld', event: 'move');
+    setSlider(0, intensity);
   }
 
   void dispose() {

@@ -7,21 +7,21 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  // IP FIXE du PC Sunlite Suite 3
-  final String sunliteIp = '192.168.1.6';
+  // IP du PC Sunlite Suite 3 (validée par capture réseau : 169.254.83.107)
+  final String sunliteIp = '169.254.83.107';
   late EasyRemoteService _easyRemote;
   bool _connected = false;
 
-  // Valeurs des 5 sliders (0.0 à 100.0)
+  // Valeurs des 5 sliders (0.0 à 255.0)
   List<double> values = List.filled(5, 0.0);
 
-  // Configuration des projecteurs + master
+  // Mapping validé par capture : id=0 = Master, id=1..4 = projecteurs (page 0)
   final List<Map<String, dynamic>> fixtures = [
-    {'name': 'Master', 'type': 'master', 'projoId': 0},
-    {'name': 'Projo 1', 'type': 'projector', 'projoId': 2},
-    {'name': 'Projo 2', 'type': 'projector', 'projoId': 3},
-    {'name': 'Projo 3', 'type': 'projector', 'projoId': 4},
-    {'name': 'Projo 4', 'type': 'projector', 'projoId': 5},
+    {'name': 'Master', 'type': 'master', 'elementId': 0, 'color': Colors.blueAccent},
+    {'name': 'Projo 1', 'type': 'projector', 'elementId': 1, 'color': Colors.amber},
+    {'name': 'Projo 2', 'type': 'projector', 'elementId': 2, 'color': Colors.amber},
+    {'name': 'Projo 3', 'type': 'projector', 'elementId': 3, 'color': Colors.amber},
+    {'name': 'Projo 4', 'type': 'projector', 'elementId': 4, 'color': Colors.amber},
   ];
 
   @override
@@ -51,19 +51,15 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       values[index] = value;
     });
-    int projoId = fixtures[index]['projoId'];
-    if (fixtures[index]['type'] == 'master') {
-      _easyRemote.setMaster(value / 100.0);
-    } else {
-      _easyRemote.setProjector(projoId, value / 100.0);
-    }
+    int elementId = fixtures[index]['elementId'];
+    _easyRemote.setSlider(elementId, value / 255.0);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Echorouk Sunlight — Console Lumière'),
+        title: Text('Mimo Sunlight — Console Lumière'),
         backgroundColor: Colors.black,
         actions: [
           Center(
@@ -91,13 +87,15 @@ class _MainScreenState extends State<MainScreen> {
         ),
         itemCount: fixtures.length,
         itemBuilder: (context, index) {
-          return _buildFader(index, fixtures[index]['name']);
+          return _buildFader(index, fixtures[index]);
         },
       ),
     );
   }
 
-  Widget _buildFader(int index, String name) {
+  Widget _buildFader(int index, Map<String, dynamic> fixture) {
+    final String name = fixture['name'];
+    final Color color = fixture['color'];
     return Container(
       decoration: BoxDecoration(
         color: Colors.black87,
@@ -109,7 +107,7 @@ class _MainScreenState extends State<MainScreen> {
           SizedBox(height: 12),
           Text(
             name,
-            style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold),
+            style: TextStyle(color: color, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           Expanded(
@@ -123,10 +121,8 @@ class _MainScreenState extends State<MainScreen> {
                 child: Slider(
                   value: values[index],
                   min: 0,
-                  max: 100,
-                  activeColor: fixtures[index]['type'] == 'master'
-                      ? Colors.blueAccent
-                      : Colors.amber,
+                  max: 255,
+                  activeColor: color,
                   inactiveColor: Colors.grey[800],
                   onChanged: (val) => _onSliderChanged(index, val),
                 ),
@@ -136,7 +132,7 @@ class _MainScreenState extends State<MainScreen> {
           Padding(
             padding: const EdgeInsets.only(bottom: 12.0),
             child: Text(
-              '${values[index].round()}%',
+              '${(values[index] / 255.0 * 100).round()}%',
               style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ),
