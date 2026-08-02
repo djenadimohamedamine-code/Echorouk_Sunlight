@@ -7,8 +7,8 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  // IP du PC Sunlite Suite 3 (confirmée par capture Wireshark : téléphone -> 192.168.1.6)
-  final String sunliteIp = '192.168.1.6';
+  // IP du PC Sunlite Suite 3 (configurable dans l'app, défaut = IP LAN validée)
+  String sunliteIp = '192.168.1.6';
   late EasyRemoteService _easyRemote;
   bool _connected = false;
 
@@ -41,6 +41,49 @@ class _MainScreenState extends State<MainScreen> {
     _easyRemote.connect();
   }
 
+  void _changeIp() {
+    final controller = TextEditingController(text: sunliteIp);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('IP du PC Sunlite'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(labelText: 'Adresse IP', hintText: '192.168.1.6'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () {
+              final ip = controller.text.trim();
+              if (ip.isNotEmpty) {
+                setState(() => sunliteIp = ip);
+                _easyRemote.dispose();
+                _easyRemote = EasyRemoteService(
+                  ipAddress: sunliteIp,
+                  onConnected: () {
+                    setState(() => _connected = true);
+                  },
+                  onError: (err) {
+                    print('EasyRemote error: $err');
+                    setState(() => _connected = false);
+                  },
+                );
+                _easyRemote.connect();
+              }
+              Navigator.pop(context);
+            },
+            child: Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _easyRemote.dispose();
@@ -62,6 +105,11 @@ class _MainScreenState extends State<MainScreen> {
         title: Text('Mimo Sunlight — Console Lumière'),
         backgroundColor: Colors.black,
         actions: [
+          IconButton(
+            icon: Icon(Icons.settings),
+            color: Colors.white70,
+            onPressed: _changeIp,
+          ),
           Center(
             child: Padding(
               padding: const EdgeInsets.only(right: 16.0),
