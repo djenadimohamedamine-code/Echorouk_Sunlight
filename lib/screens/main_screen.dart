@@ -11,22 +11,17 @@ class _MainScreenState extends State<MainScreen> {
   final String sunliteIp = '192.168.1.6';
   late EasyRemoteService _easyRemote;
   bool _connected = false;
-  int _elementCount = 0;
 
-  // Valeurs des 8 sliders (0.0 à 100.0)
-  List<double> values = List.filled(8, 0.0);
+  // Valeurs des 5 sliders (0.0 à 100.0)
+  List<double> values = List.filled(5, 0.0);
 
-  // Configuration des 8 projecteurs avec leur ID EasyRemote (page 1).
-  // D'après le layout reçu de Suite3, les boutons scène page 1 sont id=2..11.
+  // Configuration des projecteurs + master
   final List<Map<String, dynamic>> fixtures = [
-    {'name': 'Projo 1', 'control_id': 2},
-    {'name': 'Projo 2', 'control_id': 3},
-    {'name': 'Projo 3', 'control_id': 4},
-    {'name': 'Projo 4', 'control_id': 5},
-    {'name': 'Gobo 1', 'control_id': 6},
-    {'name': 'Gobo 2', 'control_id': 7},
-    {'name': 'Gobo 3', 'control_id': 8},
-    {'name': 'Gobo 4', 'control_id': 9},
+    {'name': 'Master', 'type': 'master', 'projoId': 0},
+    {'name': 'Projo 1', 'type': 'projector', 'projoId': 2},
+    {'name': 'Projo 2', 'type': 'projector', 'projoId': 3},
+    {'name': 'Projo 3', 'type': 'projector', 'projoId': 4},
+    {'name': 'Projo 4', 'type': 'projector', 'projoId': 5},
   ];
 
   @override
@@ -35,14 +30,8 @@ class _MainScreenState extends State<MainScreen> {
     _easyRemote = EasyRemoteService(
       ipAddress: sunliteIp,
       onConnected: () {
-        setState(() {
-          _connected = true;
-          _elementCount = _easyRemote.elements.length;
-        });
-        print('EasyRemote: console layout loaded ($_elementCount elements)');
-      },
-      onMessage: (msg) {
-        // Optionnel: log des messages
+        setState(() => _connected = true);
+        print('EasyRemote: connected to Suite3');
       },
       onError: (err) {
         print('EasyRemote error: $err');
@@ -62,11 +51,12 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       values[index] = value;
     });
-    // Convertir 0-100% en DMX 0-255
-    int dmxValue = (value * 2.55).round().clamp(0, 255);
-    int controlId = fixtures[index]['control_id'];
-    // La console Echorouk utilise des sliders (type=sld) pour les projecteurs.
-    _easyRemote.setSlider(1, controlId, dmxValue);
+    int projoId = fixtures[index]['projoId'];
+    if (fixtures[index]['type'] == 'master') {
+      _easyRemote.setMaster(value / 100.0);
+    } else {
+      _easyRemote.setProjector(projoId, value / 100.0);
+    }
   }
 
   @override
@@ -94,8 +84,8 @@ class _MainScreenState extends State<MainScreen> {
       body: GridView.builder(
         padding: EdgeInsets.all(16),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: MediaQuery.of(context).size.width > 600 ? 8 : 4,
-          childAspectRatio: 0.35,
+          crossAxisCount: MediaQuery.of(context).size.width > 600 ? 5 : 2,
+          childAspectRatio: 0.5,
           crossAxisSpacing: 16,
           mainAxisSpacing: 16,
         ),
@@ -134,7 +124,9 @@ class _MainScreenState extends State<MainScreen> {
                   value: values[index],
                   min: 0,
                   max: 100,
-                  activeColor: Colors.amber,
+                  activeColor: fixtures[index]['type'] == 'master'
+                      ? Colors.blueAccent
+                      : Colors.amber,
                   inactiveColor: Colors.grey[800],
                   onChanged: (val) => _onSliderChanged(index, val),
                 ),
