@@ -24,9 +24,9 @@ class SunliteService {
       sendEasyRemoteRaw('action=ready&width=0&height=0\r\n');
       
       onConnected?.call();
-      print('SunliteService: ready to send commands to \');
+      print('SunliteService: ready to send commands to $ipAddress');
     } catch (e) {
-      onError?.call('Bind error: \');
+      onError?.call('Bind error: $e');
     }
   }
 
@@ -58,7 +58,7 @@ class SunliteService {
     // 1. EASYREMOTE BLAST (On tape large pour etre sur que ca marche)
     for (int page in [0, 1, 2, 120, 121, 122]) {
       for (int eid = 0; eid < 10; eid++) {
-        sendEasyRemoteRaw('action=update_element&id=\&page=\&value=\&type=sld&event=move');
+        sendEasyRemoteRaw('action=update_element&id=$eid&page=$page&value=$val255&type=sld&event=move');
       }
     }
     
@@ -80,4 +80,3 @@ class SunliteService {
     _socket = null;
   }
 }
-
