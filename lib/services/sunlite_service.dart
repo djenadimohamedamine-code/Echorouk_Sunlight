@@ -20,8 +20,9 @@ class SunliteService {
       _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
       _socket?.listen((event) {});
       
-      // Init EasyRemote
-      sendEasyRemoteRaw('action=ready&width=0&height=0\r\n');
+      // Init EasyRemote handshake
+      sendEasyRemoteRaw('action=discover&name=MimoRemote');
+      sendEasyRemoteRaw('action=add_element&type=sld');
       
       onConnected?.call();
       print('SunliteService: ready to send commands to $ipAddress');
