@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/easy_remote_service.dart';
+import '../services/sunlite_service.dart';
 
 class MainScreen extends StatefulWidget {
   @override
@@ -7,38 +7,31 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  // IP du PC Sunlite Suite 3 (configurable dans l'app, défaut = IP LAN validée)
   String sunliteIp = '192.168.1.6';
-  late EasyRemoteService _easyRemote;
+  late SunliteService _sunliteService;
   bool _connected = false;
 
-  // Valeurs des 5 sliders (0.0 à 255.0)
-  List<double> values = List.filled(5, 0.0);
-
-  // Mapping validé par capture : id=0 = Master, id=1..4 = projecteurs (page 0)
-  final List<Map<String, dynamic>> fixtures = [
-    {'name': 'Master', 'type': 'master', 'elementId': 0, 'color': Colors.blueAccent},
-    {'name': 'Projo 1', 'type': 'projector', 'elementId': 1, 'color': Colors.amber},
-    {'name': 'Projo 2', 'type': 'projector', 'elementId': 2, 'color': Colors.amber},
-    {'name': 'Projo 3', 'type': 'projector', 'elementId': 3, 'color': Colors.amber},
-    {'name': 'Projo 4', 'type': 'projector', 'elementId': 4, 'color': Colors.amber},
-  ];
+  double masterValue = 0.0; // 0.0 to 1.0
 
   @override
   void initState() {
     super.initState();
-    _easyRemote = EasyRemoteService(
+    _initService();
+  }
+
+  void _initService() {
+    _sunliteService = SunliteService(
       ipAddress: sunliteIp,
       onConnected: () {
         setState(() => _connected = true);
-        print('EasyRemote: connected to Suite3');
+        print('Sunlite: connected');
       },
       onError: (err) {
-        print('EasyRemote error: $err');
+        print('Sunlite error: $err');
         setState(() => _connected = false);
       },
     );
-    _easyRemote.connect();
+    _sunliteService.connect();
   }
 
   void _changeIp() {
@@ -62,18 +55,8 @@ class _MainScreenState extends State<MainScreen> {
               final ip = controller.text.trim();
               if (ip.isNotEmpty) {
                 setState(() => sunliteIp = ip);
-                _easyRemote.dispose();
-                _easyRemote = EasyRemoteService(
-                  ipAddress: sunliteIp,
-                  onConnected: () {
-                    setState(() => _connected = true);
-                  },
-                  onError: (err) {
-                    print('EasyRemote error: $err');
-                    setState(() => _connected = false);
-                  },
-                );
-                _easyRemote.connect();
+                _sunliteService.dispose();
+                _initService();
               }
               Navigator.pop(context);
             },
@@ -86,23 +69,22 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
-    _easyRemote.dispose();
+    _sunliteService.dispose();
     super.dispose();
   }
 
-  void _onSliderChanged(int index, double value) {
+  void _onSliderChanged(double value) {
     setState(() {
-      values[index] = value;
+      masterValue = value;
     });
-    int elementId = fixtures[index]['elementId'];
-    _easyRemote.setSlider(elementId, value / 255.0);
+    _sunliteService.setMaster(value);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Mimo Sunlight — Console Lumière'),
+        title: Text('Mimo Sunlight — Master'),
         backgroundColor: Colors.black,
         actions: [
           IconButton(
@@ -125,66 +107,72 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
       backgroundColor: Colors.grey[900],
-      body: GridView.builder(
-        padding: EdgeInsets.all(16),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: MediaQuery.of(context).size.width > 600 ? 5 : 2,
-          childAspectRatio: 0.5,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Container(
+            constraints: BoxConstraints(maxWidth: 200, maxHeight: 600),
+            decoration: BoxDecoration(
+              color: Colors.black87,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.blueAccent.withOpacity(0.5), width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blueAccent.withOpacity(0.2),
+                  blurRadius: 15,
+                  spreadRadius: 5,
+                )
+              ]
+            ),
+            child: Column(
+              children: [
+                SizedBox(height: 24),
+                Text(
+                  'MASTER',
+                  style: TextStyle(
+                    color: Colors.blueAccent, 
+                    fontWeight: FontWeight.bold,
+                    fontSize: 24,
+                    letterSpacing: 2
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 16),
+                Expanded(
+                  child: RotatedBox(
+                    quarterTurns: 3,
+                    child: SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight: 30,
+                        thumbShape: RoundSliderThumbShape(enabledThumbRadius: 24),
+                        activeTrackColor: Colors.blueAccent,
+                        inactiveTrackColor: Colors.grey[800],
+                        thumbColor: Colors.white,
+                      ),
+                      child: Slider(
+                        value: masterValue,
+                        min: 0.0,
+                        max: 1.0,
+                        onChanged: _onSliderChanged,
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24.0),
+                  child: Text(
+                    '${(masterValue * 100).round()}%',
+                    style: TextStyle(
+                      color: Colors.white, 
+                      fontSize: 32, 
+                      fontWeight: FontWeight.bold
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-        itemCount: fixtures.length,
-        itemBuilder: (context, index) {
-          return _buildFader(index, fixtures[index]);
-        },
-      ),
-    );
-  }
-
-  Widget _buildFader(int index, Map<String, dynamic> fixture) {
-    final String name = fixture['name'];
-    final Color color = fixture['color'];
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.black87,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Column(
-        children: [
-          SizedBox(height: 12),
-          Text(
-            name,
-            style: TextStyle(color: color, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-          Expanded(
-            child: RotatedBox(
-              quarterTurns: 3,
-              child: SliderTheme(
-                data: SliderThemeData(
-                  trackHeight: 20,
-                  thumbShape: RoundSliderThumbShape(enabledThumbRadius: 16),
-                ),
-                child: Slider(
-                  value: values[index],
-                  min: 0,
-                  max: 255,
-                  activeColor: color,
-                  inactiveColor: Colors.grey[800],
-                  onChanged: (val) => _onSliderChanged(index, val),
-                ),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12.0),
-            child: Text(
-              '${(values[index] / 255.0 * 100).round()}%',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
       ),
     );
   }
