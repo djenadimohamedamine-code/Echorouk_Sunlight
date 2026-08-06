@@ -9,31 +9,26 @@ class SunliteSlider {
   final double value;
   final double posX;
   final String label;
+  final int index; // order index left-to-right
 
   SunliteSlider({
     required this.uuid,
     required this.value,
     required this.posX,
     this.label = '',
+    this.index = 0,
   });
 }
 
 /// TCP-based service for Sunlite Suite 3 control via port 2431.
-///
-/// Protocol (reverse-engineered):
-///   Header = b'Sunlite_' (8) + 0x1F 0x00 (2) + filename padded to 34 bytes + 4-byte LE payload size
-///   Total header = 48 bytes
-///   For show.json: payload size = 0, server replies with JSON containing controls
-///   For update.json: payload = JSON with {"controls":[{"uuid":"...","value":0.5}]}
 class SunliteTcpService {
   final String ipAddress;
   final int port;
   final void Function()? onConnected;
   final void Function(String error)? onError;
-  final void Function(double value)? onMasterValueChanged;
+  final void Function(List<SunliteSlider> sliders)? onSlidersUpdated;
 
-  String? _masterUuid;
-  double _lastKnownValue = 0.0;
+  List<SunliteSlider> _sliders = [];
   Timer? _refreshTimer;
   bool _refreshPaused = false;
   bool _connected = false;
@@ -44,31 +39,23 @@ class SunliteTcpService {
     this.port = 2431,
     this.onConnected,
     this.onError,
-    this.onMasterValueChanged,
+    this.onSlidersUpdated,
   });
 
   bool get isConnected => _connected;
-  String? get masterUuid => _masterUuid;
+  List<SunliteSlider> get sliders => _sliders;
 
   /// Build a Sunlite protocol message
   Uint8List _buildMessage(String filename, [Map<String, dynamic>? payload]) {
     final builder = BytesBuilder();
-
-    // 8-byte magic header
     builder.add(utf8.encode('Sunlite_'));
-
-    // 2-byte separator
     builder.addByte(0x1F);
     builder.addByte(0x00);
-
-    // Filename padded to 34 bytes
     final nameBytes = utf8.encode(filename);
     builder.add(nameBytes);
     for (int i = nameBytes.length; i < 34; i++) {
       builder.addByte(0x00);
     }
-
-    // 4-byte little-endian payload size + payload
     if (payload != null) {
       final jsonStr = jsonEncode(payload);
       final jsonBytes = utf8.encode(jsonStr);
@@ -77,9 +64,8 @@ class SunliteTcpService {
       builder.add(sizeBytes.buffer.asUint8List());
       builder.add(jsonBytes);
     } else {
-      builder.add(Uint8List(4)); // size = 0
+      builder.add(Uint8List(4));
     }
-
     return builder.toBytes();
   }
 
@@ -89,7 +75,6 @@ class SunliteTcpService {
     final buffer = BytesBuilder();
     int? expectedPayloadSize;
     bool headerRead = false;
-
     late StreamSubscription sub;
     Timer? timeout;
 
@@ -104,14 +89,11 @@ class SunliteTcpService {
       (data) {
         buffer.add(data);
         final bytes = buffer.toBytes();
-
         if (!headerRead && bytes.length >= 48) {
-          // Parse header
           final bd = ByteData.sublistView(Uint8List.fromList(bytes.sublist(44, 48)));
           expectedPayloadSize = bd.getUint32(0, Endian.little);
           headerRead = true;
         }
-
         if (headerRead && expectedPayloadSize != null) {
           final totalExpected = 48 + expectedPayloadSize!;
           if (bytes.length >= totalExpected) {
@@ -137,11 +119,10 @@ class SunliteTcpService {
         if (!completer.isCompleted) completer.complete(null);
       },
     );
-
     return completer.future;
   }
 
-  /// Send a single request and get the response on a fresh TCP connection
+  /// Send a request on a fresh TCP connection
   Future<Map<String, dynamic>?> _sendRequest(
       String filename, [Map<String, dynamic>? payload]) async {
     Socket? socket;
@@ -150,12 +131,9 @@ class SunliteTcpService {
           timeout: const Duration(seconds: 3));
       socket.add(_buildMessage(filename, payload));
       await socket.flush();
-
       if (payload == null) {
-        // Expect a response (show.json)
         return await _readResponse(socket);
       } else {
-        // update.json — fire and forget, no response expected
         await Future.delayed(const Duration(milliseconds: 50));
         return null;
       }
@@ -163,16 +141,14 @@ class SunliteTcpService {
       print('SunliteTCP: request error: $e');
       return null;
     } finally {
-      try {
-        socket?.destroy();
-      } catch (_) {}
+      try { socket?.destroy(); } catch (_) {}
     }
   }
 
-  /// Fetch show.json and extract the master slider (leftmost vslider)
-  Future<SunliteSlider?> _fetchMasterSlider() async {
+  /// Fetch show.json and extract ALL vsliders sorted left-to-right
+  Future<List<SunliteSlider>> _fetchAllSliders() async {
     final data = await _sendRequest('show.json');
-    if (data == null) return null;
+    if (data == null) return [];
 
     final pages = data['pages'] as List<dynamic>? ?? [];
     final sliders = <SunliteSlider>[];
@@ -193,34 +169,37 @@ class SunliteTcpService {
       }
     }
 
-    if (sliders.isEmpty) return null;
-
-    // Master = leftmost slider (smallest posX)
+    // Sort left-to-right and assign index
     sliders.sort((a, b) => a.posX.compareTo(b.posX));
-    return sliders.first;
+    final indexed = <SunliteSlider>[];
+    for (int i = 0; i < sliders.length; i++) {
+      final s = sliders[i];
+      indexed.add(SunliteSlider(
+        uuid: s.uuid,
+        value: s.value,
+        posX: s.posX,
+        label: s.label,
+        index: i,
+      ));
+    }
+    return indexed;
   }
 
-  /// Connect and start periodic UUID refresh
+  /// Connect and get initial state
   Future<void> connect() async {
     if (_disposed) return;
-
     try {
-      // First connection: get the master slider
-      final master = await _fetchMasterSlider();
-      if (master != null) {
-        _masterUuid = master.uuid;
-        _lastKnownValue = master.value;
+      final sliders = await _fetchAllSliders();
+      if (sliders.isNotEmpty) {
+        _sliders = sliders;
         _connected = true;
         onConnected?.call();
-        onMasterValueChanged?.call(master.value);
-        print('SunliteTCP: connected, master uuid=${master.uuid} '
-            'value=${master.value}');
-
-        // Start periodic refresh every 3 seconds
+        onSlidersUpdated?.call(sliders);
+        print('SunliteTCP: connected, found ${sliders.length} sliders');
         _startRefresh();
       } else {
         _connected = false;
-        onError?.call('No vslider found in show.json');
+        onError?.call('No sliders found');
       }
     } catch (e) {
       _connected = false;
@@ -232,17 +211,16 @@ class SunliteTcpService {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
       if (_refreshPaused || _disposed) return;
-      await _refreshUuid();
+      await _refreshUuids();
     });
   }
 
-  Future<void> _refreshUuid() async {
+  /// Refresh UUIDs silently — never update UI slider positions
+  Future<void> _refreshUuids() async {
     try {
-      final master = await _fetchMasterSlider();
-      if (master != null && !_disposed) {
-        _masterUuid = master.uuid;
-        // Only update UUID silently — never push value to UI to avoid slider jumps
-        _lastKnownValue = master.value;
+      final sliders = await _fetchAllSliders();
+      if (sliders.isNotEmpty && !_disposed) {
+        _sliders = sliders;
         if (!_connected) {
           _connected = true;
           onConnected?.call();
@@ -252,39 +230,35 @@ class SunliteTcpService {
       print('SunliteTCP: refresh error: $e');
       if (_connected) {
         _connected = false;
-        onError?.call('Lost connection: $e');
+        onError?.call('Lost connection');
       }
     }
   }
 
-  /// Pause UUID refresh during drag
-  void pauseRefresh() {
-    _refreshPaused = true;
-  }
+  void pauseRefresh() { _refreshPaused = true; }
 
-  /// Resume UUID refresh after drag ends, and fetch fresh UUID
   Future<void> resumeRefresh() async {
     _refreshPaused = false;
-    await _refreshUuid();
+    await _refreshUuids();
   }
 
-  /// Set master value (0.0 to 1.0)
-  Future<void> setMaster(double intensity) async {
-    final uuid = _masterUuid;
-    if (uuid == null) {
-      print('SunliteTCP: no master UUID, refreshing...');
-      await _refreshUuid();
-      if (_masterUuid == null) return;
-    }
-
-    final actualUuid = _masterUuid!;
+  /// Set a specific slider value by its index (0 = leftmost = master)
+  Future<void> setSliderValue(int index, double value) async {
+    if (index < 0 || index >= _sliders.length) return;
+    final uuid = _sliders[index].uuid;
     final payload = {
       'controls': [
-        {'uuid': actualUuid, 'value': intensity}
+        {'uuid': uuid, 'value': value}
       ]
     };
-
     await _sendRequest('update.json', payload);
+  }
+
+  /// Reconnect (e.g. after app resume)
+  Future<void> reconnect() async {
+    _refreshTimer?.cancel();
+    _connected = false;
+    await connect();
   }
 
   void dispose() {
