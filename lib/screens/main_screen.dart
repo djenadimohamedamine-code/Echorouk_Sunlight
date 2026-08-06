@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/sunlite_service.dart';
+import '../services/sunlite_tcp_service.dart';
 
 class MainScreen extends StatefulWidget {
   @override
@@ -7,11 +7,13 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  String sunliteIp = '192.168.1.6';
-  late SunliteService _sunliteService;
+  String sunliteIp = '192.168.1.7';
+  late SunliteTcpService _sunliteService;
   bool _connected = false;
+  String _statusText = 'Connexion...';
 
   double masterValue = 0.0; // 0.0 to 1.0
+  bool _isDragging = false;
 
   @override
   void initState() {
@@ -20,15 +22,38 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _initService() {
-    _sunliteService = SunliteService(
+    setState(() {
+      _connected = false;
+      _statusText = 'Connexion...';
+    });
+
+    _sunliteService = SunliteTcpService(
       ipAddress: sunliteIp,
       onConnected: () {
-        setState(() => _connected = true);
-        print('Sunlite: connected');
+        if (mounted) {
+          setState(() {
+            _connected = true;
+            _statusText = 'Connecté';
+          });
+        }
+        print('Sunlite: connected via TCP 2431');
       },
       onError: (err) {
         print('Sunlite error: $err');
-        setState(() => _connected = false);
+        if (mounted) {
+          setState(() {
+            _connected = false;
+            _statusText = err;
+          });
+        }
+      },
+      onMasterValueChanged: (value) {
+        // Only update UI if user is NOT dragging
+        if (!_isDragging && mounted) {
+          setState(() {
+            masterValue = value;
+          });
+        }
       },
     );
     _sunliteService.connect();
@@ -43,7 +68,8 @@ class _MainScreenState extends State<MainScreen> {
         content: TextField(
           controller: controller,
           keyboardType: TextInputType.number,
-          decoration: InputDecoration(labelText: 'Adresse IP', hintText: '192.168.1.6'),
+          decoration: InputDecoration(
+              labelText: 'Adresse IP', hintText: '192.168.1.7'),
         ),
         actions: [
           TextButton(
@@ -67,10 +93,20 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  void _reconnect() {
+    _sunliteService.dispose();
+    _initService();
+  }
+
   @override
   void dispose() {
     _sunliteService.dispose();
     super.dispose();
+  }
+
+  void _onSliderStart(double value) {
+    _isDragging = true;
+    _sunliteService.pauseRefresh();
   }
 
   void _onSliderChanged(double value) {
@@ -80,6 +116,12 @@ class _MainScreenState extends State<MainScreen> {
     _sunliteService.setMaster(value);
   }
 
+  void _onSliderEnd(double value) {
+    _isDragging = false;
+    _sunliteService.setMaster(value);
+    _sunliteService.resumeRefresh();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -87,6 +129,12 @@ class _MainScreenState extends State<MainScreen> {
         title: Text('Mimo Sunlight — Master'),
         backgroundColor: Colors.black,
         actions: [
+          IconButton(
+            icon: Icon(Icons.refresh),
+            color: Colors.white70,
+            onPressed: _reconnect,
+            tooltip: 'Reconnecter',
+          ),
           IconButton(
             icon: Icon(Icons.settings),
             color: Colors.white70,
@@ -113,38 +161,50 @@ class _MainScreenState extends State<MainScreen> {
           child: Container(
             constraints: BoxConstraints(maxWidth: 200, maxHeight: 600),
             decoration: BoxDecoration(
-              color: Colors.black87,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.blueAccent.withOpacity(0.5), width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.blueAccent.withOpacity(0.2),
-                  blurRadius: 15,
-                  spreadRadius: 5,
-                )
-              ]
-            ),
+                color: Colors.black87,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                    color: _connected
+                        ? Colors.blueAccent.withOpacity(0.5)
+                        : Colors.redAccent.withOpacity(0.5),
+                    width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: (_connected ? Colors.blueAccent : Colors.redAccent)
+                        .withOpacity(0.2),
+                    blurRadius: 15,
+                    spreadRadius: 5,
+                  )
+                ]),
             child: Column(
               children: [
                 SizedBox(height: 24),
                 Text(
                   'MASTER',
                   style: TextStyle(
-                    color: Colors.blueAccent, 
-                    fontWeight: FontWeight.bold,
-                    fontSize: 24,
-                    letterSpacing: 2
-                  ),
+                      color: Colors.blueAccent,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 24,
+                      letterSpacing: 2),
                   textAlign: TextAlign.center,
                 ),
-                SizedBox(height: 16),
+                SizedBox(height: 8),
+                Text(
+                  _statusText,
+                  style: TextStyle(
+                    color: _connected ? Colors.green[300] : Colors.red[300],
+                    fontSize: 11,
+                  ),
+                ),
+                SizedBox(height: 8),
                 Expanded(
                   child: RotatedBox(
                     quarterTurns: 3,
                     child: SliderTheme(
                       data: SliderThemeData(
                         trackHeight: 30,
-                        thumbShape: RoundSliderThumbShape(enabledThumbRadius: 24),
+                        thumbShape:
+                            RoundSliderThumbShape(enabledThumbRadius: 24),
                         activeTrackColor: Colors.blueAccent,
                         inactiveTrackColor: Colors.grey[800],
                         thumbColor: Colors.white,
@@ -153,7 +213,9 @@ class _MainScreenState extends State<MainScreen> {
                         value: masterValue,
                         min: 0.0,
                         max: 1.0,
+                        onChangeStart: _onSliderStart,
                         onChanged: _onSliderChanged,
+                        onChangeEnd: _onSliderEnd,
                       ),
                     ),
                   ),
@@ -163,10 +225,9 @@ class _MainScreenState extends State<MainScreen> {
                   child: Text(
                     '${(masterValue * 100).round()}%',
                     style: TextStyle(
-                      color: Colors.white, 
-                      fontSize: 32, 
-                      fontWeight: FontWeight.bold
-                    ),
+                        color: Colors.white,
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
