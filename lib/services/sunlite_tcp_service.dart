@@ -230,7 +230,7 @@ class SunliteTcpService {
 
   void _startRefresh() {
     _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
       if (_refreshPaused || _disposed) return;
       await _refreshUuid();
     });
@@ -241,10 +241,8 @@ class SunliteTcpService {
       final master = await _fetchMasterSlider();
       if (master != null && !_disposed) {
         _masterUuid = master.uuid;
-        if (!_refreshPaused) {
-          _lastKnownValue = master.value;
-          onMasterValueChanged?.call(master.value);
-        }
+        // Only update UUID silently — never push value to UI to avoid slider jumps
+        _lastKnownValue = master.value;
         if (!_connected) {
           _connected = true;
           onConnected?.call();
